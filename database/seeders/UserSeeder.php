@@ -1,0 +1,22 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
+
+class UserSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $adminRole = Role::firstOrCreate(['name' => 'admin']);
+
+        $adminUser = User::create([
+            'name' => 'Kshitij Dhungana',
+            'email' => 'alzahranepal@gmail.com',
+            'password' => 'kshitij@45383',
+        ]);
+        $adminUser->assignRole($adminRole);
+    }
+}
