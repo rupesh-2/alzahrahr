@@ -105,16 +105,35 @@ async function prepare(client: Client) {
   await seedAdmin(client);
 }
 
-/** Creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD when no user exists yet. */
+/**
+ * Creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD when no user exists yet.
+ *
+ * With ADMIN_RESET_PASSWORD=true, that account is also created if missing or has its
+ * password reset to ADMIN_PASSWORD on every server start, for recovering access.
+ * Remove the variable again afterwards so later password changes are kept.
+ */
 async function seedAdmin(client: Client) {
-  const email = process.env.ADMIN_EMAIL;
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD;
   if (!email || !password) return;
+  const name = process.env.ADMIN_NAME?.trim() || "Administrator";
+
+  if (process.env.ADMIN_RESET_PASSWORD === "true") {
+    await client.execute({
+      sql: `INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'admin')
+            ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, role = 'admin',
+            updated_at = CURRENT_TIMESTAMP`,
+      args: [name, email, hashPassword(password)],
+    });
+    console.warn(`[admin] ADMIN_RESET_PASSWORD is on: password for ${email} was reset. Remove the variable once you can sign in.`);
+    return;
+  }
+
   const rs = await client.execute("SELECT COUNT(*) AS count FROM users");
   if (Number(rs.rows[0].count) > 0) return;
   await client.execute({
     sql: "INSERT OR IGNORE INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
-    args: [process.env.ADMIN_NAME ?? "Administrator", email.toLowerCase(), hashPassword(password)],
+    args: [name, email, hashPassword(password)],
   });
 }
 
