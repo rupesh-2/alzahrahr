@@ -2,6 +2,7 @@ import "server-only";
 import { createClient, type Client, type InStatement, type InValue } from "@libsql/client";
 import fs from "node:fs";
 import path from "node:path";
+import { integrationEnv } from "./env";
 import { hashPassword } from "./password";
 
 /**
@@ -87,7 +88,7 @@ CREATE TABLE IF NOT EXISTS photos (
 export const STORAGE_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_DIR ?? "storage");
 
 function databaseUrl(): string {
-  const url = process.env.TURSO_DATABASE_URL;
+  const url = integrationEnv("TURSO_DATABASE_URL");
   if (url) return url;
   if (process.env.VERCEL) {
     throw new Error("TURSO_DATABASE_URL is not set. Connect a Turso database to this Vercel project (see README).");
@@ -121,7 +122,7 @@ function state(): State {
   // One client per server instance, reused across hot reloads in development.
   const g = globalThis as { __alzahraDb?: State };
   if (!g.__alzahraDb) {
-    const client = createClient({ url: databaseUrl(), authToken: process.env.TURSO_AUTH_TOKEN });
+    const client = createClient({ url: databaseUrl(), authToken: integrationEnv("TURSO_AUTH_TOKEN") });
     const ready = prepare(client);
     // Retry setup on the next request if it failed (for example, a network blip).
     ready.catch(() => {

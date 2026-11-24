@@ -1,6 +1,6 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { getCurrentUser } from "@/lib/session";
-import { ALLOWED_CONTENT_TYPES } from "@/lib/storage";
+import { ALLOWED_CONTENT_TYPES, blobToken } from "@/lib/storage";
 
 const MAX_BYTES = 50 * 1024 * 1024;
 
@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     const result = await handleUpload({
       body,
       request,
+      token: blobToken(),
       onBeforeGenerateToken: async () => {
         if (!(await getCurrentUser())) throw new Error("Not signed in");
         return { allowedContentTypes: ALLOWED_CONTENT_TYPES, maximumSizeInBytes: MAX_BYTES, addRandomSuffix: true };

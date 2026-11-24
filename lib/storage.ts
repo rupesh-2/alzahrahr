@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { del, put } from "@vercel/blob";
 import { STORAGE_DIR } from "./db";
+import { integrationEnv } from "./env";
 
 /**
  * Uploaded files go to Vercel Blob when BLOB_READ_WRITE_TOKEN is set (production),
@@ -14,8 +15,12 @@ import { STORAGE_DIR } from "./db";
 
 export const UPLOADS_DIR = path.join(STORAGE_DIR, "uploads");
 
+export function blobToken() {
+  return integrationEnv("BLOB_READ_WRITE_TOKEN");
+}
+
 export function blobEnabled() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return Boolean(blobToken());
 }
 
 export type Collection = "advertisements" | "companies" | "events" | "photos" | "company-profile";
@@ -60,7 +65,7 @@ export function isUploadedBlobUrl(value: FormDataEntryValue | null, kind: FileKi
   if (url.protocol !== "https:" || !url.hostname.endsWith(".public.blob.vercel-storage.com")) return false;
   // The store id is the first label of the hostname and also appears in the token.
   const storeId = url.hostname.split(".")[0];
-  if (!process.env.BLOB_READ_WRITE_TOKEN!.toLowerCase().includes(storeId.toLowerCase())) return false;
+  if (!blobToken()!.toLowerCase().includes(storeId.toLowerCase())) return false;
   const type = MIME_TYPES[path.extname(url.pathname).toLowerCase()];
   return kind === "pdf" ? type === "application/pdf" : Boolean(type?.startsWith("image/"));
 }
@@ -71,7 +76,7 @@ export async function saveUpload(file: File, collection: Collection): Promise<st
   const relative = `${collection}/${randomUUID()}${ext}`;
 
   if (blobEnabled()) {
-    const blob = await put(relative, file, { access: "public", contentType: file.type });
+    const blob = await put(relative, file, { access: "public", contentType: file.type, token: blobToken() });
     return blob.url;
   }
 
@@ -96,7 +101,7 @@ export function isRemote(stored: string) {
 export async function deleteUpload(stored: string | null | undefined) {
   if (!stored) return;
   if (isRemote(stored)) {
-    if (blobEnabled()) await del(stored).catch((e) => console.error("Blob delete failed", stored, e));
+    if (blobEnabled()) await del(stored, { token: blobToken() }).catch((e) => console.error("Blob delete failed", stored, e));
     return;
   }
   const target = resolveUpload(stored);
