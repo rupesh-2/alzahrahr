@@ -1,10 +1,23 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { MIME_TYPES, resolveUpload } from "@/lib/storage";
+import { blobEnabled, MIME_TYPES, presignedReadUrl, resolveUpload } from "@/lib/storage";
 
-/** Serves files uploaded through the admin panel from storage/uploads. */
+const BLOB_PATH = /^(advertisements|companies|events|photos|company-profile|uploads)\/[^/]+$/;
+
+/**
+ * Serves uploaded files: local files from storage/uploads, or (under /media/blob/…)
+ * a redirect to a short-lived link for a file in a private Blob store.
+ */
 export async function GET(_req: Request, ctx: RouteContext<"/media/[...path]">) {
   const segments = (await ctx.params).path;
+
+  if (segments[0] === "blob") {
+    const pathname = segments.slice(1).join("/");
+    if (!blobEnabled() || !BLOB_PATH.test(pathname)) return new Response("Not found", { status: 404 });
+    const url = await presignedReadUrl(pathname);
+    return new Response(null, { status: 307, headers: { Location: url, "Cache-Control": "private, max-age=300" } });
+  }
+
   const file = resolveUpload(segments.join("/"));
   const type = file ? MIME_TYPES[path.extname(file).toLowerCase()] : undefined;
   if (!file || !type) return new Response("Not found", { status: 404 });

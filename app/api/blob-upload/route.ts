@@ -1,26 +1,30 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { handleUploadPresigned, type HandleUploadPresignedBody } from "@vercel/blob/client";
 import { getCurrentUser } from "@/lib/session";
-import { ALLOWED_CONTENT_TYPES, blobToken } from "@/lib/storage";
-
-const MAX_BYTES = 50 * 1024 * 1024;
+import { ALLOWED_CONTENT_TYPES, issueUploadToken, MAX_UPLOAD_BYTES } from "@/lib/storage";
 
 /**
- * Issues short-lived tokens so the admin's browser can upload files straight to
- * Vercel Blob, bypassing Vercel's 4.5 MB request limit for Server Actions.
+ * Signs short-lived upload URLs so the admin's browser can upload files straight
+ * to Vercel Blob, bypassing Vercel's 4.5 MB request limit for Server Actions.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as HandleUploadBody;
+  const body = (await request.json()) as HandleUploadPresignedBody;
   try {
-    const result = await handleUpload({
+    const result = await handleUploadPresigned({
       body,
       request,
-      token: blobToken(),
-      onBeforeGenerateToken: async () => {
+      getSignedToken: async (pathname) => {
         if (!(await getCurrentUser())) throw new Error("Not signed in");
-        return { allowedContentTypes: ALLOWED_CONTENT_TYPES, maximumSizeInBytes: MAX_BYTES, addRandomSuffix: true };
+        if (!/^uploads\/[^/]+$/.test(pathname)) throw new Error("Invalid upload path");
+        return {
+          token: await issueUploadToken(pathname),
+          urlOptions: {
+            allowedContentTypes: ALLOWED_CONTENT_TYPES,
+            maximumSizeInBytes: MAX_UPLOAD_BYTES,
+            addRandomSuffix: true,
+          },
+        };
       },
       // The record is saved by the form's Server Action once the upload finishes.
-      onUploadCompleted: async () => {},
     });
     return Response.json(result);
   } catch (error) {

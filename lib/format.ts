@@ -7,8 +7,13 @@ export function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-/** Public URL of an uploaded file: Blob URLs as-is, local paths via app/media/[...path]. */
+/**
+ * URL to show an uploaded file: public Blob URLs as-is; private Blob files and
+ * local files through app/media/[...path].
+ */
 export function mediaUrl(stored: string | null | undefined): string | null {
   if (!stored) return null;
-  return /^https?:\/\//.test(stored) ? stored : `/media/${stored}`;
+  if (!/^https?:\/\//.test(stored)) return `/media/${stored}`;
+  const url = new URL(stored);
+  return url.hostname.includes(".private.blob.") ? `/media/blob${url.pathname}` : stored;
 }

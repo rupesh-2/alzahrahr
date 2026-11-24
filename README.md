@@ -31,14 +31,19 @@ Vercel can't keep files written at runtime, so production uses a hosted database
    create a database and connect it to the project. That sets `TURSO_DATABASE_URL` and
    `TURSO_AUTH_TOKEN`. (If you create the database on turso.tech instead, add those two
    variables yourself.) Tables are created automatically on the first request.
-2. **Files (Vercel Blob):** in *Storage*, create a **Blob** store with **public** access and connect
-   it to the project. That sets `BLOB_READ_WRITE_TOKEN`.
+2. **Files (Vercel Blob):** in *Storage*, create a **Blob** store and connect it to the project.
+   That sets `BLOB_STORE_ID` (the app authenticates with the deployment's OIDC token). If the
+   store has **private** access, also set `BLOB_ACCESS=private`; files are then shown through
+   short-lived signed links.
 3. **Settings → Environment Variables:** add `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`
    (and `ADMIN_NAME`), plus the `SMTP_*` and `MAIL_FROM_*` values for real email.
 4. Redeploy. Sign in at `/admin/login` and fill in **Company profile**.
 
 Vercel caps request bodies at 4.5 MB, so admin uploads go from the browser straight to Blob
-(`app/api/blob-upload`), and only the file URL is sent to the server. The public apply form
+through presigned URLs signed by `app/api/blob-upload`, and only the file URL is sent to the server.
+
+Locked out of the admin? Set `ADMIN_RESET_PASSWORD=true`, redeploy, sign in with `ADMIN_EMAIL` /
+`ADMIN_PASSWORD`, then remove the variable and redeploy. The public apply form
 (three files of up to 1 MB) still posts normally.
 
 On any other host, `npm run build && npm start` works without Turso or Blob, provided `storage/`

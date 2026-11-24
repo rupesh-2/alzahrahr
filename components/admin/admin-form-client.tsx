@@ -1,7 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useState } from "react";
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import { FormMessage } from "@/components/form-message";
 import { Glyph } from "@/components/glyph";
 import type { FormState } from "@/lib/form-state";
@@ -36,18 +36,24 @@ type Props = {
    * their URLs to the Server Action (needed on Vercel, which caps requests at 4.5 MB).
    */
   directUpload?: boolean;
+  blobAccess?: "public" | "private";
 };
 
 /** Replaces each chosen file with the URL of the same file uploaded to Vercel Blob. */
-async function uploadFiles(formData: FormData, onProgress: (text: string) => void): Promise<FormData> {
+async function uploadFiles(
+  formData: FormData,
+  access: "public" | "private",
+  onProgress: (text: string) => void,
+): Promise<FormData> {
   const files = [...formData.entries()].filter((e): e is [string, File] => e[1] instanceof File && e[1].size > 0);
   const out = new FormData();
   for (const [key, value] of formData.entries()) {
     if (!(value instanceof File)) out.append(key, value);
   }
   for (const [i, [key, file]] of files.entries()) {
-    const blob = await upload(`uploads/${file.name}`, file, {
-      access: "public",
+    const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase().replace(/[^.a-z0-9]/g, "") : "";
+    const blob = await uploadPresigned(`uploads/file${ext}`, file, {
+      access,
       handleUploadUrl: "/api/blob-upload",
       contentType: file.type,
       multipart: file.size > 5 * 1024 * 1024,
@@ -59,7 +65,16 @@ async function uploadFiles(formData: FormData, onProgress: (text: string) => voi
   return out;
 }
 
-export function AdminForm({ action, fields, defaults = {}, submitLabel, resetOnSuccess, columns = 2, directUpload }: Props) {
+export function AdminForm({
+  action,
+  fields,
+  defaults = {},
+  submitLabel,
+  resetOnSuccess,
+  columns = 2,
+  directUpload,
+  blobAccess = "public",
+}: Props) {
   const [state, formAction, pending] = useActionState(action, { status: "idle" } as FormState);
   const [progress, setProgress] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -71,7 +86,7 @@ export function AdminForm({ action, fields, defaults = {}, submitLabel, resetOnS
     if (directUpload) {
       try {
         setProgress("Uploading…");
-        data = await uploadFiles(formData, setProgress);
+        data = await uploadFiles(formData, blobAccess, setProgress);
       } catch (e) {
         setUploadError(`Upload failed: ${(e as Error).message}`);
         return;
