@@ -9,6 +9,11 @@ const MAX_AGE = 60 * 60 * 8; // 8 hours
 
 export type User = { id: number; name: string; email: string; role: string };
 
+/** True when SESSION_SECRET is usable (at least 32 characters). */
+export function sessionSecretConfigured() {
+  return (process.env.SESSION_SECRET?.length ?? 0) >= 32;
+}
+
 function secret(): string {
   const value = process.env.SESSION_SECRET;
   if (!value || value.length < 32) {

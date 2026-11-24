@@ -6,7 +6,7 @@ import { z } from "zod";
 import { all, batch, get, run } from "@/lib/db";
 import type { FormState } from "@/lib/form-state";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { createSession, destroySession, requireAdmin } from "@/lib/session";
+import { createSession, destroySession, requireAdmin, sessionSecretConfigured } from "@/lib/session";
 import {
   deleteUpload,
   fileMatchesKind,
@@ -89,6 +89,13 @@ function refreshSite() {
 /* ------------------------------------------------------------------ */
 
 export async function login(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (!sessionSecretConfigured()) {
+    console.error("[admin] SESSION_SECRET is missing or shorter than 32 characters; sign-in is disabled.");
+    return {
+      status: "error",
+      message: "Sign-in is not set up yet: the SESSION_SECRET setting is missing or shorter than 32 characters.",
+    };
+  }
   const email = text(formData, "email").toLowerCase();
   const password = String(formData.get("password") ?? "");
   const user = await get<{ id: number; password_hash: string; role: string }>(
