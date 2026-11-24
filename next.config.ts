@@ -13,8 +13,7 @@ const nextConfig: NextConfig = {
     },
   },
   turbopack: {
-    // The Laravel app in the parent folder has its own package-lock.json and
-    // PostCSS config; keep Turbopack scoped to this folder.
+    // Keep Turbopack scoped to this folder even if a parent folder has its own lockfile.
     root: path.resolve(__dirname),
     rules: {
       "*.css": {

@@ -1,67 +1,54 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Al Zahra HR — Next.js
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Website and admin panel for Al Zahra Human Resource Consultancy, built with Next.js (App Router).
+It was ported from an earlier Laravel + Livewire + Filament app (see the git history before the
+Next.js move). It has the public pages, the contact and apply forms, the company-profile PDF
+download, and an admin panel at `/admin`.
 
-## About Laravel
+## Run it
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Requires Node.js 22.13 or newer (it uses the built-in `node:sqlite`).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+```bash
+cp .env.example .env.local   # then fill in SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
+npm install
+npm run dev                  # http://localhost:3000
+```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+The database (`storage/app.sqlite`) and its tables are created on first request. The first admin
+account is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` when there are no users yet. Sign in at
+`/admin/login`, then fill in **Company profile** first: the forms email that address and the
+header and footer show its contact details.
 
-## Learning Laravel
+Production: `npm run build && npm start`. Serve it over HTTPS, because the admin session cookie is
+`Secure` in production. Keep `storage/` on a persistent disk and back it up, since it holds the
+database and every uploaded file.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Where things are (compared with the old Laravel app)
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+| Laravel                                   | Next.js                                        |
+| ----------------------------------------- | ---------------------------------------------- |
+| `routes/web.php` + `app/Livewire/*`        | `app/(site)/**/page.tsx` (same URLs)           |
+| `livewire/header`, `livewire/footer`       | `components/site-header.tsx`, `site-footer.tsx`|
+| `Contacts::contactUs`, `ApplyNow::applyNow`| Server Actions in `app/(site)/actions.ts`      |
+| `HomeController::downloadPdf`              | `app/download-pdf/route.ts`                    |
+| Filament resources                         | `app/admin/(panel)/*`, actions in `app/admin/actions.ts` |
+| Eloquent models + migrations               | `lib/db.ts` (schema), `lib/data.ts` (queries)  |
+| Spatie media library                       | `lib/storage.ts`; files in `storage/uploads`, served by `app/media/[...path]` |
+| Mailables + email views                    | `lib/mail.ts`, message bodies in the actions   |
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains over 2000 video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Behaviour kept from the Laravel app
 
-## Laravel Sponsors
+- Vacancies are deleted 8 days after they are posted, checked whenever the home or vacancies page loads.
+- The apply form requires a CV, passport scan and photo of up to 1 MB each. They are sent as email attachments and not stored.
+- Without `SMTP_HOST`, emails are only printed to the server log, like `MAIL_MAILER=log`.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Deliberate differences
 
-### Premium Partners
-
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
-# alzahrahr
+- Emails are sent **from** `MAIL_FROM_ADDRESS`, with the visitor's address in Reply-To. The
+  Laravel app used the visitor's address as the sender, which mail providers reject under SPF/DMARC.
+- One company profile record, edited on a single page, instead of a Filament list.
+- Each event gallery photo and each client logo is its own record, and you can upload several at once.
+- Not ported from Filament: password reset by email, email verification, bulk delete, and the
+  roles/permissions tables (all admins have the `admin` role).
+- Existing data in the Laravel MySQL/SQLite database is not migrated automatically.
