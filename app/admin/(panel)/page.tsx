@@ -5,8 +5,11 @@ import { requireAdmin } from "@/lib/session";
 
 export default async function DashboardPage() {
   const user = await requireAdmin();
-  const n = (table: string) => get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`)!.n;
-  const profile = get<{ id: number; profile_pdf: string | null }>("SELECT id, profile_pdf FROM company_profiles LIMIT 1");
+  const tables = ["advertisements", "clients", "companies", "events", "photos"] as const;
+  const counts = await Promise.all(tables.map((t) => get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${t}`)));
+  const count = Object.fromEntries(tables.map((t, i) => [t, Number(counts[i]?.n ?? 0)]));
+  const n = (table: (typeof tables)[number]) => count[table];
+  const profile = await get<{ id: number; profile_pdf: string | null }>("SELECT id, profile_pdf FROM company_profiles LIMIT 1");
 
   const tiles = [
     { label: "Vacancies", value: n("advertisements"), href: "/admin/advertisements", note: "Removed automatically 8 days after posting" },

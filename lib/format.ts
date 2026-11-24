@@ -7,7 +7,8 @@ export function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-/** Public URL for a file stored in the uploads directory (served by app/media/[...path]). */
-export function mediaUrl(relative: string | null | undefined): string | null {
-  return relative ? `/media/${relative}` : null;
+/** Public URL of an uploaded file: Blob URLs as-is, local paths via app/media/[...path]. */
+export function mediaUrl(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  return /^https?:\/\//.test(stored) ? stored : `/media/${stored}`;
 }

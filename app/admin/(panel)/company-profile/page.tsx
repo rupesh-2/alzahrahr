@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Company profile" };
 
 export default async function CompanyProfilePage() {
   await requireAdmin();
-  const profile = get<CompanyProfile>("SELECT * FROM company_profiles ORDER BY id LIMIT 1");
+  const profile = await get<CompanyProfile>("SELECT * FROM company_profiles ORDER BY id LIMIT 1");
 
   return (
     <AdminPage title="Company profile">

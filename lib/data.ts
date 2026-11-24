@@ -47,13 +47,13 @@ export async function getCompanyProfile() {
 }
 
 /** Advertisements expire eight days after they are posted (same rule as the Laravel site). */
-function deleteExpiredAdvertisements() {
-  run("DELETE FROM advertisements WHERE created_at < datetime('now', '-8 days')");
+async function deleteExpiredAdvertisements() {
+  await run("DELETE FROM advertisements WHERE created_at < datetime('now', '-8 days')");
 }
 
 export async function getAdvertisements(limit?: number) {
   await connection();
-  deleteExpiredAdvertisements();
+  await deleteExpiredAdvertisements();
   return limit
     ? all<Advertisement>("SELECT * FROM advertisements ORDER BY id LIMIT ?", limit)
     : all<Advertisement>("SELECT * FROM advertisements ORDER BY id");
@@ -71,8 +71,10 @@ export async function getCompanies() {
 
 export async function getClientsWithCompanies(): Promise<ClientWithCompanies[]> {
   await connection();
-  const clients = all<Client>("SELECT id, country_name FROM clients ORDER BY id");
-  const companies = all<Company>("SELECT * FROM companies ORDER BY id");
+  const [clients, companies] = await Promise.all([
+    all<Client>("SELECT id, country_name FROM clients ORDER BY id"),
+    all<Company>("SELECT * FROM companies ORDER BY id"),
+  ]);
   return clients.map((c) => ({ ...c, companies: companies.filter((co) => co.client_id === c.id) }));
 }
 

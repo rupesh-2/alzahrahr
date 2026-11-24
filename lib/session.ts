@@ -57,7 +57,7 @@ export async function getCurrentUser(): Promise<User | null> {
   }
   if (!data.uid || !data.exp || data.exp < Date.now() / 1000) return null;
 
-  const user = get<User>("SELECT id, name, email, role FROM users WHERE id = ?", data.uid);
+  const user = await get<User>("SELECT id, name, email, role FROM users WHERE id = ?", data.uid);
   return user?.role === "admin" ? user : null;
 }
 

@@ -15,9 +15,9 @@ export const metadata: Metadata = { title: "Edit client country" };
 export default async function EditClientPage({ params }: PageProps<"/admin/clients/[id]">) {
   await requireAdmin();
   const id = parseId((await params).id);
-  const client = id === null ? undefined : get<Client>("SELECT id, country_name FROM clients WHERE id = ?", id);
+  const client = id === null ? undefined : await get<Client>("SELECT id, country_name FROM clients WHERE id = ?", id);
   if (!client) notFound();
-  const companies = all<Company>("SELECT * FROM companies WHERE client_id = ? ORDER BY id", client.id);
+  const companies = await all<Company>("SELECT * FROM companies WHERE client_id = ? ORDER BY id", client.id);
 
   return (
     <AdminPage

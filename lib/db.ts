@@ -1,20 +1,19 @@
 import "server-only";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { createClient, type Client, type InStatement, type InValue } from "@libsql/client";
 import fs from "node:fs";
 import path from "node:path";
 import { hashPassword } from "./password";
 
 /**
- * SQLite database, opened lazily on first use.
+ * libSQL database: Turso in production (TURSO_DATABASE_URL + TURSO_AUTH_TOKEN),
+ * a local SQLite file in development.
  *
  * The schema mirrors the Laravel migrations, except that each record stores its
- * uploaded file path in a column instead of in Spatie's polymorphic `media` table.
+ * uploaded file (a Vercel Blob URL, or a path under storage/uploads locally) in a
+ * column instead of in Spatie's polymorphic `media` table.
  */
 
 const SCHEMA = `
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -86,72 +85,78 @@ CREATE TABLE IF NOT EXISTS photos (
 `;
 
 export const STORAGE_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_DIR ?? "storage");
-const DB_PATH = path.resolve(/*turbopackIgnore: true*/ process.env.DATABASE_PATH ?? path.join(STORAGE_DIR, "app.sqlite"));
 
-let db: DatabaseSync | undefined;
+function databaseUrl(): string {
+  const url = process.env.TURSO_DATABASE_URL;
+  if (url) return url;
+  if (process.env.VERCEL) {
+    throw new Error("TURSO_DATABASE_URL is not set. Connect a Turso database to this Vercel project (see README).");
+  }
+  // Local development: a SQLite file under storage/.
+  fs.mkdirSync(STORAGE_DIR, { recursive: true });
+  return `file:${path.join(STORAGE_DIR, "app.sqlite")}`;
+}
 
-function open(): DatabaseSync {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const conn = new DatabaseSync(DB_PATH);
-  conn.exec(SCHEMA);
-  seedAdmin(conn);
-  return conn;
+type State = { client: Client; ready: Promise<void> };
+
+async function prepare(client: Client) {
+  await client.executeMultiple(SCHEMA);
+  await seedAdmin(client);
 }
 
 /** Creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD when no user exists yet. */
-function seedAdmin(conn: DatabaseSync) {
-  const { count } = conn.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number };
+async function seedAdmin(client: Client) {
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
-  if (count > 0 || !email || !password) return;
-  conn
-    .prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'admin')")
-    .run(process.env.ADMIN_NAME ?? "Administrator", email.toLowerCase(), hashPassword(password));
+  if (!email || !password) return;
+  const rs = await client.execute("SELECT COUNT(*) AS count FROM users");
+  if (Number(rs.rows[0].count) > 0) return;
+  await client.execute({
+    sql: "INSERT OR IGNORE INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
+    args: [process.env.ADMIN_NAME ?? "Administrator", email.toLowerCase(), hashPassword(password)],
+  });
 }
 
-export function getDb(): DatabaseSync {
-  // Reuse one connection across hot reloads in development.
-  const g = globalThis as { __alzahraDb?: DatabaseSync };
-  if (!db) db = g.__alzahraDb ?? open();
-  g.__alzahraDb = db;
-  return db;
-}
-
-/** node:sqlite returns null-prototype rows; copy them so they can cross to Client Components. */
-function plain<T>(row: unknown): T {
-  return { ...(row as object) } as T;
-}
-
-export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
-  return getDb()
-    .prepare(sql)
-    .all(...params)
-    .map((r) => plain<T>(r));
-}
-
-export function get<T>(sql: string, ...params: SQLInputValue[]): T | undefined {
-  const row = getDb()
-    .prepare(sql)
-    .get(...params);
-  return row ? plain<T>(row) : undefined;
-}
-
-export function run(sql: string, ...params: SQLInputValue[]) {
-  const result = getDb()
-    .prepare(sql)
-    .run(...params);
-  return { changes: Number(result.changes), id: Number(result.lastInsertRowid) };
-}
-
-export function transaction<T>(fn: () => T): T {
-  const conn = getDb();
-  conn.exec("BEGIN");
-  try {
-    const out = fn();
-    conn.exec("COMMIT");
-    return out;
-  } catch (e) {
-    conn.exec("ROLLBACK");
-    throw e;
+function state(): State {
+  // One client per server instance, reused across hot reloads in development.
+  const g = globalThis as { __alzahraDb?: State };
+  if (!g.__alzahraDb) {
+    const client = createClient({ url: databaseUrl(), authToken: process.env.TURSO_AUTH_TOKEN });
+    const ready = prepare(client);
+    // Retry setup on the next request if it failed (for example, a network blip).
+    ready.catch(() => {
+      if (g.__alzahraDb?.ready === ready) g.__alzahraDb = undefined;
+    });
+    g.__alzahraDb = { client, ready };
   }
+  return g.__alzahraDb;
+}
+
+async function db(): Promise<Client> {
+  const s = state();
+  await s.ready;
+  return s.client;
+}
+
+function toObjects<T>(rs: { columns: string[]; rows: ArrayLike<unknown>[] }): T[] {
+  return rs.rows.map((row) => Object.fromEntries(rs.columns.map((c, i) => [c, row[i]])) as T);
+}
+
+export async function all<T>(sql: string, ...args: InValue[]): Promise<T[]> {
+  const rs = await (await db()).execute({ sql, args });
+  return toObjects<T>(rs);
+}
+
+export async function get<T>(sql: string, ...args: InValue[]): Promise<T | undefined> {
+  return (await all<T>(sql, ...args))[0];
+}
+
+export async function run(sql: string, ...args: InValue[]) {
+  const rs = await (await db()).execute({ sql, args });
+  return { changes: rs.rowsAffected, id: Number(rs.lastInsertRowid ?? 0) };
+}
+
+/** Runs several statements atomically. */
+export async function batch(statements: InStatement[]) {
+  if (statements.length) await (await db()).batch(statements, "write");
 }

@@ -7,7 +7,7 @@ download, and an admin panel at `/admin`.
 
 ## Run it
 
-Requires Node.js 22.13 or newer (it uses the built-in `node:sqlite`).
+Requires Node.js 20 or newer.
 
 ```bash
 cp .env.example .env.local   # then fill in SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD
@@ -20,9 +20,29 @@ account is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` when there are no users
 `/admin/login`, then fill in **Company profile** first: the forms email that address and the
 header and footer show its contact details.
 
-Production: `npm run build && npm start`. Serve it over HTTPS, because the admin session cookie is
-`Secure` in production. Keep `storage/` on a persistent disk and back it up, since it holds the
-database and every uploaded file.
+Locally, with the Turso and Blob variables empty, data lives in `storage/` (a SQLite file plus
+`storage/uploads/`).
+
+## Deploy on Vercel
+
+Vercel can't keep files written at runtime, so production uses a hosted database and file store:
+
+1. **Database (Turso):** in the Vercel project, open *Storage* (or the Marketplace), add **Turso**,
+   create a database and connect it to the project. That sets `TURSO_DATABASE_URL` and
+   `TURSO_AUTH_TOKEN`. (If you create the database on turso.tech instead, add those two
+   variables yourself.) Tables are created automatically on the first request.
+2. **Files (Vercel Blob):** in *Storage*, create a **Blob** store with **public** access and connect
+   it to the project. That sets `BLOB_READ_WRITE_TOKEN`.
+3. **Settings → Environment Variables:** add `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+   (and `ADMIN_NAME`), plus the `SMTP_*` and `MAIL_FROM_*` values for real email.
+4. Redeploy. Sign in at `/admin/login` and fill in **Company profile**.
+
+Vercel caps request bodies at 4.5 MB, so admin uploads go from the browser straight to Blob
+(`app/api/blob-upload`), and only the file URL is sent to the server. The public apply form
+(three files of up to 1 MB) still posts normally.
+
+On any other host, `npm run build && npm start` works without Turso or Blob, provided `storage/`
+is on a persistent disk. Serve over HTTPS, since the admin session cookie is `Secure` in production.
 
 ## Where things are (compared with the old Laravel app)
 
@@ -33,8 +53,8 @@ database and every uploaded file.
 | `Contacts::contactUs`, `ApplyNow::applyNow`| Server Actions in `app/(site)/actions.ts`      |
 | `HomeController::downloadPdf`              | `app/download-pdf/route.ts`                    |
 | Filament resources                         | `app/admin/(panel)/*`, actions in `app/admin/actions.ts` |
-| Eloquent models + migrations               | `lib/db.ts` (schema), `lib/data.ts` (queries)  |
-| Spatie media library                       | `lib/storage.ts`; files in `storage/uploads`, served by `app/media/[...path]` |
+| Eloquent models + migrations               | `lib/db.ts` (libSQL schema), `lib/data.ts` (queries) |
+| Spatie media library                       | `lib/storage.ts`: Vercel Blob, or `storage/uploads` locally (served by `app/media/[...path]`) |
 | Mailables + email views                    | `lib/mail.ts`, message bodies in the actions   |
 
 ## Behaviour kept from the Laravel app
